@@ -609,8 +609,8 @@ const INCManagement = () => {
           </div>
         )}
         
-        {/* Bulk Actions Header - Show for Completed and Failed to Comply tabs */}
-        {(activeTab === 'completed' || activeTab === 'failed-to-comply') && filteredRecords.length > 0 && (
+        {/* Bulk Actions Header - Show for Completed, Failed-to-Comply and Failed tabs */}
+        {(activeTab === 'completed' || activeTab === 'failed-to-comply' || activeTab === 'failed') && filteredRecords.length > 0 && (
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <input
@@ -639,8 +639,8 @@ const INCManagement = () => {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-primary-50 to-blue-50">
               <tr>
-                {/* Select column for Completed and Failed to Comply tabs */}
-                {(activeTab === 'completed' || activeTab === 'failed-to-comply') && (
+                {/* Select column for Completed, Failed-to-Comply and Failed tabs */}
+                {(activeTab === 'completed' || activeTab === 'failed-to-comply' || activeTab === 'failed') && (
                   <th className="px-3 py-3 text-center w-10">
                     <span className="sr-only">Select</span>
                   </th>
@@ -693,14 +693,15 @@ const INCManagement = () => {
                       ''
                     }`}
                   >
-                    {/* Select checkbox for Completed and Failed to Comply tabs */}
-                    {(activeTab === 'completed' || activeTab === 'failed-to-comply') && (
+                    {/* Select checkbox for Completed, Failed-to-Comply and Failed tabs */}
+                    {(activeTab === 'completed' || activeTab === 'failed-to-comply' || activeTab === 'failed') && (
                       <td className="px-3 py-3 whitespace-nowrap text-center">
                         <input
                           type="checkbox"
-                          checked={selectedItems.includes(record._id)}
-                          onChange={() => toggleSelectItem(record._id)}
-                          className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                          checked={selectedItems.includes(record.inc_id || record._id)}
+                          onChange={() => toggleSelectItem(record.inc_id || record._id)}
+                          disabled={activeTab === 'failed' && !record.inc_id}
+                          className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500 disabled:opacity-50"
                         />
                       </td>
                     )}
@@ -877,14 +878,16 @@ const INCManagement = () => {
                               <Edit2 className="w-3 h-3" />
                               Edit Grade
                             </button>
-                            <button
-                              onClick={() => handleDeleteINC(record._id)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
-                              title="Delete Record"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Delete
-                            </button>
+                            {record.inc_id && (
+                              <button
+                                onClick={() => handleDeleteINC(record.inc_id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
+                                title="Delete INC Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
+                              </button>
+                            )}
                           </>
                         ) : isOverdue ? (
                           <>

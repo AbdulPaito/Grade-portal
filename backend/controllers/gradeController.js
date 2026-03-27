@@ -174,7 +174,27 @@ const getAllGrades = async (req, res) => {
     const grades = await Grade.find(query).sort({ date_uploaded: -1 }).limit(limit * 1).skip((page - 1) * limit);
     const count = await Grade.countDocuments(query);
 
-    res.json({ success: true, data: grades, pagination: { page: parseInt(page), limit: parseInt(limit), total: count, pages: Math.ceil(count / limit) } });
+    // For failed grades, find associated INC records
+    let gradesWithIncId = grades;
+    if (status === 'Failed') {
+      const INC = require('../models/INC');
+      gradesWithIncId = await Promise.all(
+        grades.map(async (grade) => {
+          const incRecord = await INC.findOne({
+            student_id: grade.student_id,
+            subject_code: grade.subject_code,
+            year_level: grade.year_level,
+            semester: grade.semester
+          });
+          return {
+            ...grade.toObject(),
+            inc_id: incRecord ? incRecord._id : null
+          };
+        })
+      );
+    }
+
+    res.json({ success: true, data: gradesWithIncId, pagination: { page: parseInt(page), limit: parseInt(limit), total: count, pages: Math.ceil(count / limit) } });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

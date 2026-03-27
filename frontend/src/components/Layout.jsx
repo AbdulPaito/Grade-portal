@@ -8,7 +8,8 @@ import {
   LogOut,
   GraduationCap,
   Menu,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -28,6 +29,7 @@ const Layout = ({ children }) => {
     { path: '/admin/students', label: 'Students', icon: Users },
     { path: '/admin/grades', label: 'Grades', icon: FileSpreadsheet },
     { path: '/admin/inc', label: 'INC Management', icon: AlertCircle },
+    { path: '/admin/reports', label: 'Reports', icon: FileText },
   ];
 
   const studentNavItems = [

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useINC, useReports, useGrades, useStudents } from '../hooks/useApi';
-import { AlertCircle, CheckCircle, Clock, Calendar, Edit2, AlertTriangle, Search, X, Filter, GraduationCap, Layers, BookOpen, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Calendar, Edit2, AlertTriangle, Search, X, Filter, GraduationCap, Layers, BookOpen, XCircle, Award } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 
 const INCManagement = () => {
@@ -29,6 +29,20 @@ const INCManagement = () => {
     completed: false,
     completed_grade: '',
     due_date: ''
+  });
+  
+  // Override Modal State
+  const [overrideModal, setOverrideModal] = useState({
+    isOpen: false,
+    record: null,
+    grade: ''
+  });
+  
+  // Edit Grade Modal State
+  const [editGradeModal, setEditGradeModal] = useState({
+    isOpen: false,
+    record: null,
+    grade: ''
   });
 
   useEffect(() => {
@@ -103,20 +117,38 @@ const INCManagement = () => {
     }
   };
 
-  const handleOverride = async (inc, grade) => {
-    if (!confirm('Are you sure you want to override this failed INC?')) return;
+  const handleOverride = async () => {
+    const { record, grade } = overrideModal;
+    if (!grade || isNaN(parseFloat(grade))) {
+      alert('Please enter a valid grade');
+      return;
+    }
     try {
-      await overrideFailedINC(inc._id, grade);
+      await overrideFailedINC(record._id, parseFloat(grade));
+      setOverrideModal({ isOpen: false, record: null, grade: '' });
       fetchData();
     } catch (error) {
       alert('Error overriding INC');
     }
   };
 
-  const handleEditGrade = async (record, newGrade) => {
+  const openOverrideModal = (record) => {
+    setOverrideModal({
+      isOpen: true,
+      record,
+      grade: ''
+    });
+  };
+
+  const handleEditGrade = async () => {
+    const { record, grade } = editGradeModal;
+    if (!grade || isNaN(parseFloat(grade))) {
+      alert('Please enter a valid grade');
+      return;
+    }
     try {
-      const gradeValue = parseFloat(newGrade);
-      if (isNaN(gradeValue) || gradeValue < 0 || gradeValue > 5) {
+      const gradeValue = parseFloat(grade);
+      if (gradeValue < 0 || gradeValue > 5) {
         alert('Please enter a valid grade between 0 and 5');
         return;
       }
@@ -129,11 +161,19 @@ const INCManagement = () => {
         status: newStatus
       });
       
+      setEditGradeModal({ isOpen: false, record: null, grade: '' });
       fetchData();
-      alert('Grade updated successfully!');
     } catch (error) {
       alert(error.response?.data?.message || 'Error updating grade');
     }
+  };
+
+  const openEditGradeModal = (record) => {
+    setEditGradeModal({
+      isOpen: true,
+      record,
+      grade: record.grade || ''
+    });
   };
 
   const openEditModal = (inc) => {
@@ -532,9 +572,12 @@ const INCManagement = () => {
                       </div>
                     </td>
 
-                    {/* Semester */}
+                    {/* Semester - Improved Design */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-xs text-gray-600">{record.semester}</span>
+                      <span className="inline-flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-100">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {record.semester}
+                      </span>
                     </td>
 
                     {/* Status */}
@@ -608,10 +651,7 @@ const INCManagement = () => {
                           <span className="text-xs text-gray-500">Grade: <span className="font-bold text-blue-600">{record.completed_grade}</span></span>
                         ) : isAutoFailed ? (
                           <button
-                            onClick={() => {
-                              const grade = prompt('Enter final grade to override:');
-                              if (grade) handleOverride(record, parseFloat(grade));
-                            }}
+                            onClick={() => openOverrideModal(record)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
                           >
                             <Edit2 className="w-3 h-3" />
@@ -619,11 +659,8 @@ const INCManagement = () => {
                           </button>
                         ) : isGradeRecord ? (
                           <button
-                            onClick={() => {
-                              const newGrade = prompt('Enter new grade for this student:');
-                              if (newGrade) handleEditGrade(record, newGrade);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg text-xs font-medium hover:bg-primary-100 transition-colors"
+                            onClick={() => openEditGradeModal(record)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
                           >
                             <Edit2 className="w-3 h-3" />
                             Edit Grade
@@ -721,12 +758,14 @@ const INCManagement = () => {
                     </div>
                   </div>
 
-                  {/* Semester */}
+                  {/* Semester - Improved Design */}
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-xs text-gray-500 mb-1">Semester</p>
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-4 h-4 text-blue-600" />
-                      <span className="font-semibold text-gray-900">{editingINC.semester}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                        {editingINC.semester}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -804,6 +843,291 @@ const INCManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Override Modal - Same Design as Manage INC Record */}
+      {overrideModal.isOpen && overrideModal.record && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-white rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                  <Edit2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Override Failed INC</h2>
+                  <p className="text-sm text-gray-500">{overrideModal.record.subject_code} - {overrideModal.record.full_name}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setOverrideModal({ isOpen: false, record: null, grade: '' })} 
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Student Info Card - Same design as Manage INC */}
+              <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-xl border border-red-200">
+                {/* Student Header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center shadow-sm">
+                    <span className="text-xl font-bold text-red-700">
+                      {overrideModal.record.full_name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">{overrideModal.record.full_name}</p>
+                    <p className="text-sm text-gray-500">{overrideModal.record.student_id}</p>
+                  </div>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Course */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Course</p>
+                    <div className="flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4 text-primary-600" />
+                      <span className="font-semibold text-gray-900">{overrideModal.record.course || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Section */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Section</p>
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-orange-600" />
+                      <span className="font-semibold text-gray-900">{overrideModal.record.section || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Year */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Year Level</p>
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold text-gray-900">Year {overrideModal.record.year_level}</span>
+                    </div>
+                  </div>
+
+                  {/* Semester - Improved Design */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Semester</p>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                      <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                        {overrideModal.record.semester}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject */}
+                <div className="mt-3 bg-white p-3 rounded-lg border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Subject</p>
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-gray-900">{overrideModal.record.subject_code} - {overrideModal.record.subject_name}</span>
+                  </div>
+                </div>
+
+                {/* Current Status */}
+                <div className="mt-3 bg-red-100 p-3 rounded-lg border border-red-200">
+                  <p className="text-xs text-red-600 mb-1 font-medium">Current Status</p>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="font-semibold text-red-700">Failed to Comply</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grade Input */}
+              <div className="bg-white p-4 rounded-xl border border-gray-200">
+                <label className="label flex items-center gap-2 text-gray-700 mb-2">
+                  <Award className="w-4 h-4 text-gray-400" />
+                  Enter Final Grade
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="5"
+                  placeholder="Enter grade (0-5)"
+                  value={overrideModal.grade}
+                  onChange={(e) => setOverrideModal(prev => ({ ...prev, grade: e.target.value }))}
+                  className="input w-full text-lg"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Enter a grade between 0 and 5. Grade ≤ 3.0 will be marked as Passed.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setOverrideModal({ isOpen: false, record: null, grade: '' })}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleOverride}
+                  disabled={!overrideModal.grade || isNaN(parseFloat(overrideModal.grade))}
+                  className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Confirm Override
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Grade Modal - Same Design as Override Modal */}
+      {editGradeModal.isOpen && editGradeModal.record && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-white rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                  <Edit2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Edit Grade</h2>
+                  <p className="text-sm text-gray-500">{editGradeModal.record.subject_code} - {editGradeModal.record.full_name}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditGradeModal({ isOpen: false, record: null, grade: '' })} 
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Student Info Card - Same design as Override Modal */}
+              <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-xl border border-red-200">
+                {/* Student Header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center shadow-sm">
+                    <span className="text-xl font-bold text-red-700">
+                      {editGradeModal.record.full_name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">{editGradeModal.record.full_name}</p>
+                    <p className="text-sm text-gray-500">{editGradeModal.record.student_id}</p>
+                  </div>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Course */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Course</p>
+                    <div className="flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4 text-primary-600" />
+                      <span className="font-semibold text-gray-900">{editGradeModal.record.course || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Section */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Section</p>
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-orange-600" />
+                      <span className="font-semibold text-gray-900">{editGradeModal.record.section || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Year */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Year Level</p>
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold text-gray-900">Year {editGradeModal.record.year_level}</span>
+                    </div>
+                  </div>
+
+                  {/* Semester - Improved Design */}
+                  <div className="bg-white p-3 rounded-lg border border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Semester</p>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                      <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                        {editGradeModal.record.semester}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject */}
+                <div className="mt-3 bg-white p-3 rounded-lg border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Subject</p>
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-gray-900">{editGradeModal.record.subject_code} - {editGradeModal.record.subject_name}</span>
+                  </div>
+                </div>
+
+                {/* Current Status */}
+                <div className="mt-3 bg-red-100 p-3 rounded-lg border border-red-200">
+                  <p className="text-xs text-red-600 mb-1 font-medium">Current Status</p>
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    <span className="font-semibold text-red-700">Failed - Grade {editGradeModal.record.grade}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grade Input */}
+              <div className="bg-white p-4 rounded-xl border border-gray-200">
+                <label className="label flex items-center gap-2 text-gray-700 mb-2">
+                  <Award className="w-4 h-4 text-gray-400" />
+                  Enter New Grade
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="5"
+                  placeholder="Enter grade (0-5)"
+                  value={editGradeModal.grade}
+                  onChange={(e) => setEditGradeModal(prev => ({ ...prev, grade: e.target.value }))}
+                  className="input w-full text-lg"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Enter a grade between 0 and 5. Grade ≤ 3.0 will be marked as Passed.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditGradeModal({ isOpen: false, record: null, grade: '' })}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditGrade}
+                  disabled={!editGradeModal.grade || isNaN(parseFloat(editGradeModal.grade))}
+                  className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Update Grade
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

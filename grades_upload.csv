@@ -1,0 +1,9 @@
+student_id,subject_code,subject_name,grade,year,semester
+2022-007807,CS101,Computer Programming,1.00,1,1st
+2022-007807,MATH201,Calculus I,INC,1,1st
+2022-007807,ENG101,English Composition,2.00,1,1st
+2022-007807,PHY101,Physics I,INC,1,1st
+2022-007807,CS102,Data Structures,1.75,2,1st
+2022-007807,MATH202,Calculus II,2.25,2,1st
+2022-007807,ENG102,Technical Writing,INC,2,1st
+2022-007807,PHY102,Physics II,1.50,2,1st

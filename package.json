@@ -1,0 +1,14 @@
+{
+  "name": "student-grade-portal",
+  "version": "1.0.0",
+  "description": "Student Grade Portal with INC Monitoring System",
+  "scripts": {
+    "install-deps": "cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

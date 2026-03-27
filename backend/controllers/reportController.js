@@ -31,7 +31,11 @@ const getINCList = async (req, res) => {
 const getOverdueINC = async (req, res) => {
   try {
     const today = new Date();
-    const overdue = await INC.find({ due_date: { $lt: today }, completed: false }).sort({ due_date: 1 });
+    const overdue = await INC.find({ 
+      due_date: { $lt: today }, 
+      completed: false,
+      auto_failed: { $ne: true }
+    }).sort({ due_date: 1 });
     res.json({ success: true, data: overdue, count: overdue.length });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

@@ -113,4 +113,105 @@ const overrideFailedINC = async (req, res) => {
   }
 };
 
-module.exports = { getAllINC, getStudentINC, updateINC, setDueDate, overrideFailedINC };
+const deleteINC = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inc = await INC.findByIdAndDelete(id);
+    if (!inc) return res.status(404).json({ message: 'INC record not found' });
+    res.json({ success: true, message: 'INC record deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const bulkDeleteINC = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Array of IDs is required' });
+    }
+    const result = await INC.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true, message: `${result.deletedCount} INC records deleted successfully` });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const markAsFailed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inc = await INC.findById(id);
+    if (!inc) return res.status(404).json({ message: 'INC record not found' });
+
+    inc.auto_failed = true;
+    inc.completed = false;
+    inc.completed_grade = 5.0;
+    inc.failed_date = new Date();
+    await inc.save();
+
+    // Log the auto-fail
+    await logINCAutoFail(id, req.user);
+
+    // Update the grade to 5.0 and status to Failed
+    await Grade.findOneAndUpdate(
+      { student_id: inc.student_id, subject_code: inc.subject_code, year_level: inc.year_level, semester: inc.semester },
+      { grade: 5.0, status: 'Failed' }
+    );
+
+    res.json({ success: true, message: 'INC marked as failed (Failed to Comply)', data: inc });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const bulkMarkAsFailed = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Array of IDs is required' });
+    }
+
+    let processedCount = 0;
+    const results = [];
+
+    // Process all records
+    for (const id of ids) {
+      try {
+        const inc = await INC.findById(id);
+        if (!inc) continue;
+
+        inc.auto_failed = true;
+        inc.completed = false;
+        inc.completed_grade = 5.0;
+        inc.failed_date = new Date();
+        await inc.save();
+
+        // Log the auto-fail
+        await logINCAutoFail(id, req.user);
+
+        // Update the grade to 5.0 and status to Failed
+        await Grade.findOneAndUpdate(
+          { student_id: inc.student_id, subject_code: inc.subject_code, year_level: inc.year_level, semester: inc.semester },
+          { grade: 5.0, status: 'Failed' }
+        );
+
+        processedCount++;
+        results.push({ id, success: true });
+      } catch (err) {
+        results.push({ id, success: false, error: err.message });
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `${processedCount} INC records marked as Failed to Comply`,
+      processed: processedCount,
+      total: ids.length,
+      results
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+module.exports = { getAllINC, getStudentINC, updateINC, setDueDate, overrideFailedINC, deleteINC, bulkDeleteINC, markAsFailed, bulkMarkAsFailed };

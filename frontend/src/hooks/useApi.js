@@ -120,12 +120,36 @@ export const useINC = () => {
     return response.data;
   };
 
+  const deleteINC = async (id) => {
+    const response = await api.delete(`/inc/${id}`);
+    return response.data;
+  };
+
+  const bulkDeleteINC = async (ids) => {
+    const response = await api.post('/inc/bulk-delete', { ids });
+    return response.data;
+  };
+
+  const markAsFailed = async (id) => {
+    const response = await api.put(`/inc/${id}/mark-failed`);
+    return response.data;
+  };
+
+  const bulkMarkAsFailed = async (ids) => {
+    const response = await api.post('/inc/bulk-mark-failed', { ids });
+    return response.data;
+  };
+
   return {
     getAllINC,
     getStudentINC,
     updateINC,
     setDueDate,
-    overrideFailedINC
+    overrideFailedINC,
+    deleteINC,
+    bulkDeleteINC,
+    markAsFailed,
+    bulkMarkAsFailed
   };
 };
 

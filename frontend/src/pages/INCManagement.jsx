@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useINC, useReports, useGrades, useStudents } from '../hooks/useApi';
-import { AlertCircle, CheckCircle, Clock, Calendar, Edit2, AlertTriangle, Search, X, Filter, GraduationCap, Layers, BookOpen, XCircle, Award } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Calendar, Edit2, AlertTriangle, Search, X, Filter, GraduationCap, Layers, BookOpen, XCircle, Award, Trash2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 
 const INCManagement = () => {
-  const { getAllINC, updateINC, setDueDate, overrideFailedINC } = useINC();
+  const { getAllINC, updateINC, setDueDate, overrideFailedINC, deleteINC, bulkDeleteINC, markAsFailed, bulkMarkAsFailed } = useINC();
   const { getOverdueINC, getCompletedINC } = useReports();
   const { getAllGrades, updateGrade } = useGrades();
   const { getAllStudents } = useStudents();
@@ -31,6 +31,10 @@ const INCManagement = () => {
     due_date: ''
   });
   
+  // Selection state for bulk delete
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
+  
   // Override Modal State
   const [overrideModal, setOverrideModal] = useState({
     isOpen: false,
@@ -38,6 +42,20 @@ const INCManagement = () => {
     grade: ''
   });
   
+  // Delete Confirmation Modal State
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    record: null,
+    type: 'single', // 'single' or 'bulk'
+    count: 1
+  });
+
+  // Auto-Fail Confirmation Modal State
+  const [autoFailModal, setAutoFailModal] = useState({
+    isOpen: false,
+    count: 0
+  });
+
   // Edit Grade Modal State
   const [editGradeModal, setEditGradeModal] = useState({
     isOpen: false,
@@ -183,6 +201,101 @@ const INCManagement = () => {
       completed_grade: inc.completed_grade || '',
       due_date: inc.due_date ? new Date(inc.due_date).toISOString().split('T')[0] : ''
     });
+  };
+
+  const handleMarkAsFailed = async (id) => {
+    if (!confirm('Are you sure you want to mark this as Failed to Comply? This will move the record to Failed to Comply tab.')) return;
+    try {
+      await markAsFailed(id);
+      fetchData();
+      alert('Record marked as Failed to Comply successfully!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error marking as failed');
+    }
+  };
+
+  const handleDeleteINC = async (id) => {
+    setDeleteModal({
+      isOpen: true,
+      record: { _id: id },
+      type: 'single',
+      count: 1
+    });
+  };
+
+  const confirmDelete = async () => {
+    try {
+      if (deleteModal.type === 'bulk') {
+        await bulkDeleteINC(selectedItems);
+        setSelectedItems([]);
+        setSelectAll(false);
+        alert(`${selectedItems.length} records deleted successfully!`);
+      } else {
+        await deleteINC(deleteModal.record._id);
+        alert('Record deleted successfully!');
+      }
+      setDeleteModal({ isOpen: false, record: null, type: 'single', count: 1 });
+      fetchData();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error deleting record(s)');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) {
+      alert('Please select at least one record to delete');
+      return;
+    }
+    setDeleteModal({
+      isOpen: true,
+      record: null,
+      type: 'bulk',
+      count: selectedItems.length
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredRecords.map(r => r._id));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleRunAutoFail = async () => {
+    const overdueCount = overdueRecords.length;
+    if (overdueCount === 0) {
+      alert('No overdue records to process!');
+      return;
+    }
+    
+    setAutoFailModal({
+      isOpen: true,
+      count: overdueCount
+    });
+  };
+
+  const confirmAutoFail = async () => {
+    try {
+      const ids = overdueRecords.map(r => r._id);
+      const result = await bulkMarkAsFailed(ids);
+      
+      setAutoFailModal({ isOpen: false, count: 0 });
+      fetchData();
+      alert(`${result.processed} overdue records have been moved to Failed to Comply!`);
+    } catch (error) {
+      alert('Error processing auto-fail: ' + (error.response?.data?.message || error.message));
+      setAutoFailModal({ isOpen: false, count: 0 });
+    }
+  };
+
+  const toggleSelectItem = (id) => {
+    if (selectedItems.includes(id)) {
+      setSelectedItems(prev => prev.filter(item => item !== id));
+    } else {
+      setSelectedItems(prev => [...prev, id]);
+    }
   };
 
   const getDaysLeft = (dueDate) => {
@@ -470,10 +583,68 @@ const INCManagement = () => {
 
       {/* INC Records Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Run Auto-Fail Header - Show only for Overdue tab */}
+        {activeTab === 'overdue' && overdueRecords.length > 0 && (
+          <div className="px-4 py-3 bg-red-50 border-b border-red-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-red-800">
+                  {overdueRecords.length} Overdue Record{overdueRecords.length > 1 ? 's' : ''} Need{overdueRecords.length === 1 ? 's' : ''} Attention
+                </span>
+                <p className="text-xs text-red-600">
+                  Auto-mark all as Failed to Comply
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleRunAutoFail}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors shadow-sm"
+            >
+              <AlertCircle className="w-4 h-4" />
+              Run Auto-Fail ({overdueRecords.length})
+            </button>
+          </div>
+        )}
+        
+        {/* Bulk Actions Header - Show for Completed and Failed to Comply tabs */}
+        {(activeTab === 'completed' || activeTab === 'failed-to-comply') && filteredRecords.length > 0 && (
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selectAll}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700">
+                {selectedItems.length > 0 ? `${selectedItems.length} selected` : 'Select all'}
+              </span>
+            </div>
+            {selectedItems.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Delete Selected
+              </button>
+            )}
+          </div>
+        )}
+        
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-primary-50 to-blue-50">
               <tr>
+                {/* Select column for Completed and Failed to Comply tabs */}
+                {(activeTab === 'completed' || activeTab === 'failed-to-comply') && (
+                  <th className="px-3 py-3 text-center w-10">
+                    <span className="sr-only">Select</span>
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Student ID</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Full Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Course</th>
@@ -483,7 +654,9 @@ const INCManagement = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Sem</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Grade</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">Due Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-800 uppercase tracking-wider">
+                  {activeTab === 'failed' ? 'Due/Completed Date' : 'Due Date'}
+                </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-primary-800 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -520,6 +693,18 @@ const INCManagement = () => {
                       ''
                     }`}
                   >
+                    {/* Select checkbox for Completed and Failed to Comply tabs */}
+                    {(activeTab === 'completed' || activeTab === 'failed-to-comply') && (
+                      <td className="px-3 py-3 whitespace-nowrap text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(record._id)}
+                          onChange={() => toggleSelectItem(record._id)}
+                          className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                        />
+                      </td>
+                    )}
+
                     {/* Student ID */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       {record.student_id}
@@ -572,12 +757,9 @@ const INCManagement = () => {
                       </div>
                     </td>
 
-                    {/* Semester - Improved Design */}
+                    {/* Semester - Match Grade Management Design */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-100">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {record.semester}
-                      </span>
+                      <span className="text-xs text-gray-600">{record.semester}</span>
                     </td>
 
                     {/* Status */}
@@ -623,13 +805,22 @@ const INCManagement = () => {
                       </span>
                     </td>
 
-                    {/* Due Date */}
+                    {/* Due Date - Updated for Failed tab to show completed date */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex flex-col">
                         {isGradeRecord ? (
                           <>
                             <span className="text-xs text-gray-600">Grade: {record.grade}</span>
                             <span className="text-xs text-gray-500">From batch upload</span>
+                          </>
+                        ) : activeTab === 'failed' ? (
+                          <>
+                            <span className="text-xs text-gray-600">Due: {format(new Date(record.due_date), 'MMM d, yyyy')}</span>
+                            {record.failed_date && (
+                              <span className="text-xs text-red-600">
+                                Failed: {format(new Date(record.failed_date), 'MMM d, yyyy')}
+                              </span>
+                            )}
                           </>
                         ) : (
                           <>
@@ -646,25 +837,79 @@ const INCManagement = () => {
 
                     {/* Actions */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center gap-1">
                         {isCompleted ? (
-                          <span className="text-xs text-gray-500">Grade: <span className="font-bold text-blue-600">{record.completed_grade}</span></span>
+                          <>
+                            <span className="text-xs text-gray-500">Grade: <span className="font-bold text-blue-600">{record.completed_grade}</span></span>
+                            <button
+                              onClick={() => handleDeleteINC(record._id)}
+                              className="ml-2 inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </>
                         ) : isAutoFailed ? (
-                          <button
-                            onClick={() => openOverrideModal(record)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            Override
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openOverrideModal(record)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Override
+                            </button>
+                            <button
+                              onClick={() => handleDeleteINC(record._id)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </>
                         ) : isGradeRecord ? (
-                          <button
-                            onClick={() => openEditGradeModal(record)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            Edit Grade
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openEditGradeModal(record)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors mr-1"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Edit Grade
+                            </button>
+                            <button
+                              onClick={() => handleDeleteINC(record._id)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </>
+                        ) : isOverdue ? (
+                          <>
+                            <button
+                              onClick={() => openEditModal(record)}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 bg-primary-50 text-primary-700 rounded-lg text-xs font-medium hover:bg-primary-100 transition-colors mr-1"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Manage
+                            </button>
+                            <button
+                              onClick={() => handleMarkAsFailed(record._id)}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 transition-colors"
+                            >
+                              <AlertCircle className="w-3 h-3" />
+                              Failed to Comply
+                            </button>
+                            <button
+                              onClick={() => handleDeleteINC(record._id)}
+                              className="inline-flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200 ml-1"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         ) : (
                           <button
                             onClick={() => openEditModal(record)}
@@ -989,6 +1234,155 @@ const INCManagement = () => {
         </div>
       )}
       
+      {/* Delete Confirmation Modal - Beautiful Design for Overdue, Completed, Failed, Failed to Comply */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fadeIn">
+            {/* Header with Tab-Specific Icon */}
+            <div className="p-6 text-center">
+              {activeTab === 'overdue' && (
+                <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <AlertTriangle className="w-10 h-10 text-orange-600" />
+                </div>
+              )}
+              {activeTab === 'completed' && (
+                <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+              )}
+              {activeTab === 'failed' && (
+                <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <XCircle className="w-10 h-10 text-red-600" />
+                </div>
+              )}
+              {activeTab === 'failed-to-comply' && (
+                <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <AlertCircle className="w-10 h-10 text-gray-600" />
+                </div>
+              )}
+              
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                {deleteModal.type === 'bulk' 
+                  ? `Delete ${deleteModal.count} Records?`
+                  : 'Delete Record?'}
+              </h2>
+              
+              {/* Info Box */}
+              <div className={`rounded-xl p-4 mb-4 ${
+                activeTab === 'overdue' ? 'bg-orange-50 border border-orange-200' :
+                activeTab === 'completed' ? 'bg-green-50 border border-green-200' :
+                activeTab === 'failed' ? 'bg-red-50 border border-red-200' :
+                'bg-gray-50 border border-gray-200'
+              }`}>
+                <p className={`text-3xl font-bold mb-1 ${
+                  activeTab === 'overdue' ? 'text-orange-600' :
+                  activeTab === 'completed' ? 'text-green-600' :
+                  activeTab === 'failed' ? 'text-red-600' :
+                  'text-gray-600'
+                }`}>
+                  {deleteModal.type === 'bulk' ? deleteModal.count : '1'}
+                </p>
+                <p className={`text-sm font-medium ${
+                  activeTab === 'overdue' ? 'text-orange-700' :
+                  activeTab === 'completed' ? 'text-green-700' :
+                  activeTab === 'failed' ? 'text-red-700' :
+                  'text-gray-700'
+                }`}>
+                  {activeTab === 'overdue' && 'Overdue Record'}
+                  {activeTab === 'completed' && 'Completed Record'}
+                  {activeTab === 'failed' && 'Failed Record'}
+                  {activeTab === 'failed-to-comply' && 'Failed to Comply Record'}
+                  {deleteModal.type === 'bulk' ? 's' : ''} will be deleted
+                </p>
+              </div>
+              
+              <p className="text-sm text-gray-500">
+                This action will only remove the INC record. The grade record will remain in the system. This action cannot be undone.
+              </p>
+              
+              {/* Warning Note */}
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Please confirm before deleting</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, record: null, type: 'single', count: 1 })}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className={`flex-1 px-4 py-3 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-lg ${
+                  activeTab === 'overdue' 
+                    ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/30' :
+                  activeTab === 'completed'
+                    ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30' :
+                  activeTab === 'failed'
+                    ? 'bg-red-500 hover:bg-red-600 shadow-red-500/30' :
+                    'bg-gray-500 hover:bg-gray-600 shadow-gray-500/30'
+                }`}
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteModal.type === 'bulk' ? `Delete ${deleteModal.count}` : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Fail Confirmation Modal - Beautiful Design */}
+      {autoFailModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fadeIn">
+            {/* Header with Warning Icon */}
+            <div className="p-6 text-center">
+              <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <AlertCircle className="w-10 h-10 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Run Auto-Fail Process
+              </h2>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                <p className="text-3xl font-bold text-red-600 mb-1">
+                  {autoFailModal.count}
+                </p>
+                <p className="text-sm text-red-700 font-medium">
+                  Overdue Record{autoFailModal.count > 1 ? 's' : ''} will be marked as <strong>Failed to Comply</strong>
+                </p>
+              </div>
+              <p className="text-sm text-gray-500">
+                This action will move all overdue records to the Failed to Comply tab with a grade of 5.0. This action cannot be undone.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Please review before confirming</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => setAutoFailModal({ isOpen: false, count: 0 })}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAutoFail}
+                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/30"
+              >
+                <AlertCircle className="w-4 h-4" />
+                Run Auto-Fail
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Edit Grade Modal - Same Design as Override Modal */}
       {editGradeModal.isOpen && editGradeModal.record && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1013,9 +1407,8 @@ const INCManagement = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Student Info Card - Same design as Override Modal */}
+              {/* Student Info Card */}
               <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-xl border border-red-200">
-                {/* Student Header */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center shadow-sm">
                     <span className="text-xl font-bold text-red-700">
@@ -1028,9 +1421,7 @@ const INCManagement = () => {
                   </div>
                 </div>
 
-                {/* Info Grid */}
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Course */}
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-xs text-gray-500 mb-1">Course</p>
                     <div className="flex items-center gap-1.5">
@@ -1038,8 +1429,6 @@ const INCManagement = () => {
                       <span className="font-semibold text-gray-900">{editGradeModal.record.course || 'N/A'}</span>
                     </div>
                   </div>
-
-                  {/* Section */}
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-xs text-gray-500 mb-1">Section</p>
                     <div className="flex items-center gap-1.5">
@@ -1047,8 +1436,6 @@ const INCManagement = () => {
                       <span className="font-semibold text-gray-900">{editGradeModal.record.section || 'N/A'}</span>
                     </div>
                   </div>
-
-                  {/* Year */}
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-xs text-gray-500 mb-1">Year Level</p>
                     <div className="flex items-center gap-1.5">
@@ -1056,8 +1443,6 @@ const INCManagement = () => {
                       <span className="font-semibold text-gray-900">Year {editGradeModal.record.year_level}</span>
                     </div>
                   </div>
-
-                  {/* Semester - Improved Design */}
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-xs text-gray-500 mb-1">Semester</p>
                     <div className="flex items-center gap-1.5">
@@ -1069,7 +1454,6 @@ const INCManagement = () => {
                   </div>
                 </div>
 
-                {/* Subject */}
                 <div className="mt-3 bg-white p-3 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500 mb-1">Subject</p>
                   <div className="flex items-center gap-1.5">
@@ -1078,7 +1462,6 @@ const INCManagement = () => {
                   </div>
                 </div>
 
-                {/* Current Status */}
                 <div className="mt-3 bg-red-100 p-3 rounded-lg border border-red-200">
                   <p className="text-xs text-red-600 mb-1 font-medium">Current Status</p>
                   <div className="flex items-center gap-2">

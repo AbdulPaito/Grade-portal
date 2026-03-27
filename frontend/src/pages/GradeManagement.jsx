@@ -475,7 +475,10 @@ const GradeManagement = () => {
 
                     {/* Semester */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-xs text-gray-600">{grade.semester}</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium border border-blue-100">
+                        <Clock className="w-3.5 h-3.5" />
+                        {grade.semester}
+                      </span>
                     </td>
 
                     {/* Grade */}
